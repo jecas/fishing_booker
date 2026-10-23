@@ -6,7 +6,13 @@ from app.models import CaptainDayOff, Trip, Booking
 
 
 def get_unavailability_reasons(session, trip, trip_date, group_size, now=None) -> list[str]:
+    if not now:
+        now = datetime.now(timezone.utc)
+
     reasons = []
+
+    if trip_date < now.date():
+        reasons.append("TRIP_DATE_IN_PAST")
 
     if not trip.min_group_size <= group_size <= trip.max_group_size:
         reasons.append("GROUP_SIZE_OUT_OF_RANGE")
@@ -19,9 +25,6 @@ def get_unavailability_reasons(session, trip, trip_date, group_size, now=None) -
     day_off = session.get(CaptainDayOff, (captain_id, trip_date))
     if day_off:
         reasons.append("CAPTAIN_DAY_OFF")
-
-    if not now:
-        now = datetime.now(timezone.utc)
 
     blocking_booking_id = session.scalar(
         select(Booking)

@@ -26,6 +26,14 @@ services:
       AWS_DEFAULT_REGION: us-east-1
     volumes:
       - .:/app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+    ports:
+      - "127.0.0.1:8002:8000"
     depends_on:
       db:
         condition: service_healthy

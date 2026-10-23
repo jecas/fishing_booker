@@ -9,7 +9,14 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+psycopg://booking:book
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db():
+    with SessionLocal() as session:
+        yield session
+
 
 class Base(DeclarativeBase):
     pass
