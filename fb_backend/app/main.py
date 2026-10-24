@@ -1,13 +1,16 @@
 from datetime import date
 from fastapi import FastAPI, Depends, Query, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.db import get_db
-from app.models import Charter, Trip
+from app.models import Charter, Trip, Customer
 from app.storage import generate_photo_url
 from app.availability import get_unavailability_reasons
-from app.schemas import HealthResponse, CharterResponse, CharterDetailsResponse, TripResponse, TripAvailabilityResponse
+from app.schemas import HealthResponse, CharterResponse, CharterDetailsResponse, TripResponse, TripAvailabilityResponse, \
+    BookingResponse, BookingCreate
+from app.booking_service import create_booking as create_booking_service, get_booking as get_booking_service
 
 
 app = FastAPI(title="Fishing Charter Booking API")
@@ -88,3 +91,44 @@ def get_trip(trip_id: int, session: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Trip not found")
 
     return trip
+
+
+@app.post("/bookings", response_model=BookingResponse, status_code=201)
+def book_trip(payload: BookingCreate, session: Session = Depends(get_db)):
+    try:
+        with session.begin():
+            customer = Customer(**payload.customer.model_dump())
+            session.add(customer)
+            session.flush()
+
+            try:
+                booking = create_booking_service(session, payload.trip_id, customer.id, payload.trip_date,
+                                                 payload.group_size)
+            except ValueError as e:
+                if str(e) == "Trip not found.":
+                    raise HTTPException(status_code=404, detail=str(e)) from e
+
+                raise HTTPException(status_code=409, detail=str(e)) from e
+
+        return BookingResponse.model_validate(booking)
+    except IntegrityError as e:
+        constraint_name = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
+
+        if constraint_name == "uq_booking_active_charter_date":
+            raise HTTPException(status_code=409, detail="Charter is alredy booked for this date.") from e
+
+        raise e
+
+
+@app.get("/bookings/{booking_id}", response_model=BookingResponse,
+         responses={404: {"description": "Booking not found"}})
+def get_booking(booking_id: int, session: Session = Depends(get_db)):
+    with session.begin():
+        booking = get_booking_service(session=session, booking_id=booking_id)
+
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+
+        response = BookingResponse.model_validate(booking)
+
+    return response

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -59,3 +59,37 @@ class TripResponse(BaseModel):
 class TripAvailabilityResponse(TripResponse):
     available: bool | None = None
     unavailability_reasons: list[str] = Field(default_factory=list)
+
+
+class CustomerCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=1, max_length=254)
+    phone: str = Field(min_length=1, max_length=32)
+
+
+class BookingCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trip_id: int = Field(gt=0)
+    trip_date: date
+    group_size: int = Field(ge=1)
+    customer: CustomerCreate
+
+
+class BookingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trip_id: int
+    charter_id: int
+    customer_id: int
+    trip_date: date
+    group_size: int
+    total_price: Decimal
+    currency: str
+    status: str
+    created_at: datetime
+    expires_at: datetime

@@ -52,3 +52,24 @@ def create_booking(session: Session, trip_id: int, customer_id: int, trip_date: 
     session.flush()
 
     return booking
+
+
+def get_booking(session: Session, booking_id: int) -> Booking | None:
+    booking = session.get(Booking, booking_id)
+
+    if not booking:
+        return None
+
+    session.execute(
+        select(Captains.id)
+        .where(Captains.id == booking.charter.captain_id)
+        .with_for_update()
+    ).scalar_one()
+
+    session.refresh(booking)
+
+    expire_pending_bookings(session=session, charter_id=booking.charter_id, now=datetime.now(timezone.utc))
+
+    session.refresh(booking)
+
+    return booking

@@ -119,3 +119,22 @@ class Booking(Base):
     trip: Mapped["Trip"] = relationship("Trip", back_populates="bookings")
     charter: Mapped["Charter"] = relationship("Charter")
     customer: Mapped["Customer"] = relationship("Customer", back_populates="bookings")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    __table_args__ = (
+        CheckConstraint("status IN ('PROCESSING', 'SUCCEEDED', 'DECLINED')", name="ck_payment_status"),
+        Index("uq_payment_active_booking", "booking_id", unique=True,
+              postgresql_where=text("status IN ('PROCESSING', 'SUCCEEDED')"))
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(36), unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20))
+    provider_reference: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    booking: Mapped["Booking"] = relationship("Booking")

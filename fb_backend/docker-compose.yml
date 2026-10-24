@@ -43,6 +43,18 @@ services:
       MOTO_PORT: "5000"
     ports:
       - "127.0.0.1:5000:5000"
+  payment-provider:
+    build: .
+    volumes:
+      - .:/app
+    command:
+      - uvicorn
+      - payment_service_mock.payment:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+    ports:
+      - "127.0.0.1:8003:8000"
 
 volumes:
   postgres_data:
