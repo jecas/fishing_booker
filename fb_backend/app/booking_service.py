@@ -10,7 +10,7 @@ def expire_pending_bookings(session: Session, charter_id: int, now: datetime) ->
     statement = (update(Booking)
                  .where(Booking.charter_id == charter_id,
                         Booking.status == "PENDING",
-                        Booking.expires_at < now).values(status="EXPIRED"))
+                        Booking.expires_at <= now).values(status="EXPIRED"))
 
     result = session.execute(statement)
 
