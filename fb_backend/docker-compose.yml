@@ -25,6 +25,7 @@ services:
       AWS_SECRET_ACCESS_KEY: testing
       AWS_DEFAULT_REGION: us-east-1
       PAYMENT_PROVIDER_URL: http://payment-provider:8000
+      REVIEWS_PROVIDER_URL: http://reviews-provider:8000
     volumes:
       - .:/app
     command:
@@ -59,6 +60,18 @@ services:
       - --reload
     ports:
       - "127.0.0.1:8003:8000"
+  reviews-provider:
+    build: .
+    volumes:
+      - .:/app
+    command:
+      - uvicorn
+      - review_service_mock.reviews:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+    ports:
+      - "127.0.0.1:8004:8000"
 
 volumes:
   postgres_data:

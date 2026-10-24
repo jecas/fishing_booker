@@ -3,6 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
+from review_service_mock.reviews import ReviewResponse
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -32,9 +34,18 @@ class CharterPhotoResponse(BaseModel):
     url: str
 
 
+class ReviewResponse(BaseModel):
+    id: str
+    author: str
+    rating: int = Field(ge=1, le=5)
+    text: str
+
+
 class CharterDetailsResponse(CharterResponse):
     captain: CaptainResponse
     photos: list[CharterPhotoResponse]
+    reviews: list[ReviewResponse] = Field(default_factory=list)
+    reviews_status: Literal["not_linked", "available", "unavailable"] = "not_linked"
 
 
 class TripResponse(BaseModel):
@@ -115,3 +126,7 @@ class PaymentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     payment_token: Literal["tok_success", "tok_declined", "tok_timeout_after_charge"]
+
+
+class ReviewsProviderResponse(BaseModel):
+    reviews: list[ReviewResponse]

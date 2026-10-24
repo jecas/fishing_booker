@@ -34,6 +34,7 @@ class Charter(Base):
     captain_id: Mapped[int] = mapped_column(ForeignKey("captains.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text)
+    review_business_id: Mapped[str | None] = mapped_column(String(100))
     captain: Mapped["Captains"] = relationship("Captains", back_populates="charters")
     photos: Mapped[list["CharterPhoto"]] = relationship("CharterPhoto", back_populates="charter",
                                                         cascade="all, delete-orphan")

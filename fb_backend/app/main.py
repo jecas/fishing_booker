@@ -11,10 +11,11 @@ from app.models import Charter, Trip, Customer
 from app.storage import generate_photo_url
 from app.availability import get_unavailability_reasons
 from app.schemas import HealthResponse, CharterResponse, CharterDetailsResponse, TripResponse, TripAvailabilityResponse, \
-    BookingResponse, BookingCreate, PaymentCreate, PaymentResultResponse
+    BookingResponse, BookingCreate, PaymentCreate, PaymentResultResponse, CaptainResponse
 from app.booking_service import create_booking as create_booking_service, get_booking as get_booking_service
 from app.payment_client import PaymentProviderUnavailable
 from app.payment_service import process_payment
+from app.reviews_client import ReviewsProviderUnavailable, get_reviews
 
 
 app = FastAPI(title="Fishing Charter Booking API")
@@ -35,20 +36,32 @@ def list_charters(offset: int=Query(default=0, ge=0), limit: int=Query(default=2
 
 @app.get("/charters/{charter_id}", response_model=CharterDetailsResponse)
 def get_charter(charter_id: int, session: Session = Depends(get_db)):
-    statement = (select(Charter)
-                 .options(joinedload(Charter.captain), selectinload(Charter.photos))
-                 .where(Charter.id == charter_id))
+    with session.begin():
+        statement = (select(Charter)
+                    .options(joinedload(Charter.captain), selectinload(Charter.photos))
+                    .where(Charter.id == charter_id))
     charter = session.scalar(statement)
 
     if not charter:
         raise HTTPException(status_code=404, detail="Charter not found")
 
-    return {
+    business_id = charter.review_business_id
+
+    response = CharterDetailsResponse(
         **CharterResponse.model_validate(charter).model_dump(),
-        "captain": charter.captain,
-        "photos": [{"id": photo.id, "url": generate_photo_url(photo.object_key)}
-                   for photo in sorted(charter.photos, key=lambda photo: photo.id)]
-    }
+        captain=CaptainResponse.model_validate(charter.captain),
+        photos = [{"id": photo.id, "url": generate_photo_url(photo.object_key)}
+                  for photo in sorted(charter.photos, key=lambda photo: photo.id)]
+    )
+
+    if business_id:
+        try:
+            response.reviews = get_reviews(business_id)
+            response.reviews_status = "available"
+        except ReviewsProviderUnavailable:
+            response.reviews_status = "unavailable"
+
+    return response
 
 
 @app.get("/charters/{charter_id}/trips", response_model=list[TripAvailabilityResponse])
