@@ -45,8 +45,11 @@ services:
       - "127.0.0.1:5000:5000"
   payment-provider:
     build: .
+    environment:
+      PAYMENT_DB_PATH: /data/payments.sqlite3
     volumes:
       - .:/app
+      - payment-provider-data:/data
     command:
       - uvicorn
       - payment_service_mock.payment:app
@@ -58,3 +61,4 @@ services:
 
 volumes:
   postgres_data:
+  payment-provider-data:
