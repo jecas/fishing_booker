@@ -37,7 +37,11 @@ services:
     ports:
       - "127.0.0.1:8002:8000"
     depends_on:
-      db:
+      seed:
+        condition: service_completed_successfully
+      payment-provider:
+        condition: service_healthy
+      reviews-provider:
         condition: service_healthy
   s3:
     image: motoserver/moto:5.2.4
@@ -45,6 +49,11 @@ services:
       MOTO_PORT: "5000"
     ports:
       - "127.0.0.1:5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   payment-provider:
     build: .
     environment:
@@ -60,6 +69,11 @@ services:
       - --reload
     ports:
       - "127.0.0.1:8003:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   reviews-provider:
     build: .
     volumes:
@@ -72,6 +86,38 @@ services:
       - --reload
     ports:
       - "127.0.0.1:8004:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://booking:booking@db:5432/booking
+    volumes:
+      - .:/app
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+  seed:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://booking:booking@db:5432/booking
+      S3_ENDPOINT_URL: http://s3:5000
+      S3_BUCKET_NAME: charter-photos
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - .:/app
+    command: ["python", "-m", "app.seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      s3:
+        condition: service_healthy
 
 volumes:
   postgres_data:
