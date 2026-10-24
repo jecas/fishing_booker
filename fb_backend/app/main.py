@@ -1,16 +1,20 @@
+from uuid import UUID
 from datetime import date
-from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi import FastAPI, Depends, Query, HTTPException, Header
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
+
 
 from app.db import get_db
 from app.models import Charter, Trip, Customer
 from app.storage import generate_photo_url
 from app.availability import get_unavailability_reasons
 from app.schemas import HealthResponse, CharterResponse, CharterDetailsResponse, TripResponse, TripAvailabilityResponse, \
-    BookingResponse, BookingCreate
+    BookingResponse, BookingCreate, PaymentCreate, PaymentResultResponse
 from app.booking_service import create_booking as create_booking_service, get_booking as get_booking_service
+from app.payment_client import PaymentProviderUnavailable
+from app.payment_service import process_payment
 
 
 app = FastAPI(title="Fishing Charter Booking API")
@@ -132,3 +136,30 @@ def get_booking(booking_id: int, session: Session = Depends(get_db)):
         response = BookingResponse.model_validate(booking)
 
     return response
+
+
+@app.post("/bookings/{booking_id}/payments", response_model=PaymentResultResponse,
+          responses={404: {"description": "Booking not found"},
+                     409: {"description": "Payment or idempotency conflict"},
+                     503: {"description": "Payment outcome unknown; retry the same request"}})
+def pay_booking(booking_id: int, payload: PaymentCreate, idempotency_key: UUID = Header(alias="Idempotency-Key"),
+                session: Session = Depends(get_db)):
+    try:
+        return process_payment(session=session, booking_id=booking_id, idempotency_key=str(idempotency_key),
+                               payment_token=payload.payment_token)
+    except PaymentProviderUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment outcome is unknown. Retry with the same Idempotency-Key and payment token."
+        ) from exc
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Booking not found." else 409
+
+        raise HTTPException( status_code=status_code, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+
+        if constraint_name in {"payments_idempotency_key_key", "uq_payment_active_booking"}:
+            raise HTTPException(status_code=409, detail="Payment attempt or idempotency key conflict.") from exc
+
+        raise

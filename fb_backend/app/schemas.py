@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 
 class HealthResponse(BaseModel):
@@ -93,3 +94,24 @@ class BookingResponse(BaseModel):
     status: str
     created_at: datetime
     expires_at: datetime
+
+
+class PaymentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    booking_id: int
+    status: str
+    created_at: datetime
+    provider_reference: str | None
+
+
+class PaymentResultResponse(BaseModel):
+    booking: BookingResponse
+    payment: PaymentResponse
+
+
+class PaymentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payment_token: Literal["tok_success", "tok_declined", "tok_timeout_after_charge"]
