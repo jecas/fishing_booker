@@ -1,0 +1,430 @@
+{
+  "info": {
+    "_postman_id": "f5fb027d-66ce-4350-96f4-bed390620d1d",
+    "name": "Fishing Charter Booking API \u2014 booking workflow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Run requests 01\u201311 in order against seeded demo data. Creates a real demo booking and payment. For another full run clear trip_date to select a new future date. No environment file is required. Uses the API contract supplied in openapi.json."
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8002",
+      "type": "string"
+    },
+    {
+      "key": "charter_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "trip_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "trip_date",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "group_size",
+      "value": "4",
+      "type": "string"
+    },
+    {
+      "key": "booking_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "idempotency_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "photo_url",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "expected_total",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "currency",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_response",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Healthy\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 Browse charters",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/charters?offset=0&limit=100",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "const charters = pm.response.json();",
+              "pm.test(\"Demo charter exists\", function () {",
+              "    const charter = charters.find(c => c.title === \"Demo fishing charter\");",
+              "    pm.expect(charter, \"Run the seed before this collection\").to.exist;",
+              "    pm.collectionVariables.set(\"charter_id\", charter.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 Charter details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/charters/{{charter_id}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "const charter = pm.response.json();",
+              "pm.test(\"Captain, photos and review status are present\", function () {",
+              "    pm.expect(charter.captain).to.have.property(\"id\");",
+              "    pm.expect(charter.photos).to.be.an(\"array\");",
+              "    pm.expect(charter.reviews_status).to.be.oneOf([\"available\", \"unavailable\", \"not_linked\"]);",
+              "});",
+              "if (charter.photos.length) pm.collectionVariables.set(\"photo_url\", charter.photos[0].url);"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "04 Browse trips and select regular trip",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/charters/{{charter_id}}/trips",
+        "description": "Selects a regular trip so the example does not depend on seasonal dates. A random future date is chosen only when trip_date is empty. If unavailable, choose another date and run this flow again."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Keep a manually supplied date. Clear trip_date to choose a new future date.",
+              "if (!pm.collectionVariables.get(\"trip_date\")) {",
+              "    const date = new Date();",
+              "    date.setUTCDate(date.getUTCDate() + 60 + Math.floor(Math.random() * 365));",
+              "    pm.collectionVariables.set(\"trip_date\", date.toISOString().slice(0, 10));",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "const trips = pm.response.json();",
+              "pm.test(\"Regular trip exists\", function () {",
+              "    const trip = trips.find(t => t.trip_type === \"regular\");",
+              "    pm.expect(trip).to.exist;",
+              "    pm.collectionVariables.set(\"trip_id\", trip.id);",
+              "    const group = Math.min(trip.max_group_size, Math.max(trip.min_group_size, 4));",
+              "    pm.collectionVariables.set(\"group_size\", group);",
+              "    pm.collectionVariables.set(\"expected_total\", (Number(trip.price) * (trip.pricing_model === \"per_person\" ? group : 1)).toFixed(2));",
+              "    pm.collectionVariables.set(\"currency\", trip.currency);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "05 Trip details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/trips/{{trip_id}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Selected trip\", () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"trip_id\"))));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "06 Check availability",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/charters/{{charter_id}}/trips?date={{trip_date}}&group_size={{group_size}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Selected trip is available\", function () {",
+              "    const trip = pm.response.json().find(t => t.id === Number(pm.collectionVariables.get(\"trip_id\")));",
+              "    pm.expect(trip).to.exist;",
+              "    pm.expect(trip.available, JSON.stringify(trip.unavailability_reasons)).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "07 Create booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/bookings",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"trip_id\": {{trip_id}},\n  \"trip_date\": \"{{trip_date}}\",\n  \"group_size\": {{group_size}},\n  \"customer\": {\n    \"first_name\": \"Ana\",\n    \"last_name\": \"Petrovic\",\n    \"email\": \"ana@example.com\",\n    \"phone\": \"+381641234567\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Never pay an earlier booking if creation of the new one fails.",
+              "pm.collectionVariables.unset(\"booking_id\");",
+              "pm.collectionVariables.unset(\"idempotency_key\");"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"Pending booking with calculated price\", function () {",
+              "    const booking = pm.response.json();",
+              "    pm.expect(booking.status).to.eql(\"PENDING\");",
+              "    pm.expect(booking.total_price).to.eql(pm.collectionVariables.get(\"expected_total\"));",
+              "    pm.expect(booking.currency).to.eql(pm.collectionVariables.get(\"currency\"));",
+              "    pm.collectionVariables.set(\"booking_id\", booking.id);",
+              "    pm.collectionVariables.set(\"idempotency_key\", pm.variables.replaceIn(\"{{$guid}}\"));",
+              "    pm.collectionVariables.unset(\"payment_response\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "08 Read booking",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/bookings/{{booking_id}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Selected booking\", () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"booking_id\"))));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "09 Pay booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/payments",
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"payment_token\": \"tok_success\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Payment confirms booking\", function () {",
+              "    const result = pm.response.json();",
+              "    pm.expect(result.booking.status).to.eql(\"CONFIRMED\");",
+              "    pm.expect(result.payment.status).to.eql(\"SUCCEEDED\");",
+              "    pm.collectionVariables.set(\"payment_response\", JSON.stringify(result));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "10 Replay same payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/payments",
+        "description": "Intentionally reuses the exact key and token from request 09. Do not regenerate the UUID on every send.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"payment_token\": \"tok_success\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Same request returns the saved result\", function () {",
+              "    pm.expect(pm.response.json()).to.deep.eql(JSON.parse(pm.collectionVariables.get(\"payment_response\")));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "11 Verify charter is blocked",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/charters/{{charter_id}}/trips?date={{trip_date}}&group_size={{group_size}}",
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"All returned charter trips are blocked\", function () {",
+              "    const trips = pm.response.json();",
+              "    pm.expect(trips.length).to.be.above(0);",
+              "    trips.forEach(trip => {",
+              "        pm.expect(trip.available).to.eql(false);",
+              "        pm.expect(trip.unavailability_reasons).to.include(\"CHARTER_ALREADY_BOOKED\");",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}
