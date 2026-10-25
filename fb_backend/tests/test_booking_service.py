@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from app.booking_service import create_booking
 from app.models import Captains, Charter, Customer, Trip
+from app.exceptions import ResourceNotFoundError, BookingConflictError
 from tests.base import DatabaseTestCase
 
 
@@ -67,7 +68,7 @@ class BookingServiceTests(DatabaseTestCase):
     @patch("app.booking_service.datetime")
     def test_unavailable_group_size_is_rejected(self, mocked_datetime):
         mocked_datetime.now.return_value = self.now
-        with self.assertRaisesRegex(ValueError,"GROUP_SIZE_OUT_OF_RANGE"):
+        with self.assertRaisesRegex(BookingConflictError,"GROUP_SIZE_OUT_OF_RANGE"):
             create_booking(session=self.session, trip_id=self.trip.id, customer_id=self.customer.id,
                            trip_date=self.trip_date, group_size=7)
 
@@ -77,7 +78,7 @@ class BookingServiceTests(DatabaseTestCase):
         create_booking(session=self.session, trip_id=self.trip.id, customer_id=self.customer.id,
                        trip_date=self.trip_date, group_size=4)
 
-        with self.assertRaisesRegex(ValueError,"CHARTER_ALREADY_BOOKED"):
+        with self.assertRaisesRegex(BookingConflictError,"CHARTER_ALREADY_BOOKED"):
             create_booking(session=self.session, trip_id=self.trip.id, customer_id=self.customer.id,
                            trip_date=self.trip_date, group_size=4)
 
@@ -103,21 +104,21 @@ class BookingServiceTests(DatabaseTestCase):
     @patch("app.booking_service.datetime")
     def test_missing_trip_is_rejected(self, mocked_datetime):
         mocked_datetime.now.return_value = self.now
-        with self.assertRaisesRegex(ValueError, "Trip not found"):
+        with self.assertRaisesRegex(ResourceNotFoundError, "Trip not found"):
             create_booking(session=self.session, trip_id=0, customer_id=self.customer.id, trip_date=self.trip_date,
                            group_size=4)
 
     @patch("app.booking_service.datetime")
     def test_missing_customer_is_rejected(self, mocked_datetime):
         mocked_datetime.now.return_value = self.now
-        with self.assertRaisesRegex(ValueError, "Customer not found"):
+        with self.assertRaisesRegex(ResourceNotFoundError, "Customer not found"):
             create_booking(session=self.session, trip_id=self.trip.id, customer_id=0, trip_date=self.trip_date,
                            group_size=4)
 
     @patch("app.booking_service.datetime")
     def test_past_date_is_rejected(self, mocked_datetime):
         mocked_datetime.now.return_value = self.now
-        with self.assertRaisesRegex(ValueError,"Trip date cannot be in the past"):
+        with self.assertRaisesRegex(BookingConflictError,"Trip date cannot be in the past"):
             create_booking(session=self.session, trip_id=self.trip.id, customer_id=self.customer.id,
                            trip_date=self.now.date() - timedelta(days=1), group_size=4)
 
@@ -132,7 +133,7 @@ class BookingServiceTests(DatabaseTestCase):
 
         mocked_datetime.now.return_value = booking.expires_at + timedelta(minutes=1)
 
-        with self.assertRaisesRegex(ValueError,"CHARTER_ALREADY_BOOKED"):
+        with self.assertRaisesRegex(BookingConflictError,"CHARTER_ALREADY_BOOKED"):
             create_booking(session=self.session, trip_id=self.trip.id, customer_id=self.customer.id,
                            trip_date=self.trip_date, group_size=4)
 

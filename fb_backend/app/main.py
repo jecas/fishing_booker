@@ -15,6 +15,7 @@ from app.booking_service import create_booking as create_booking_service, get_bo
 from app.payment_client import PaymentProviderUnavailable
 from app.payment_service import process_payment
 from app.reviews_client import ReviewsProviderUnavailable, get_reviews
+from app.exceptions import ResourceNotFoundError, PaymentConflictError, BookingConflictError
 
 
 app = FastAPI(title="Fishing Charter Booking API")
@@ -120,10 +121,9 @@ def book_trip(payload: BookingCreate, session: Session = Depends(get_db)):
             try:
                 booking = create_booking_service(session, payload.trip_id, customer.id, payload.trip_date,
                                                  payload.group_size)
-            except ValueError as e:
-                if str(e) == "Trip not found":
-                    raise HTTPException(status_code=404, detail=str(e)) from e
-
+            except ResourceNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e)) from e
+            except BookingConflictError as e:
                 raise HTTPException(status_code=409, detail=str(e)) from e
 
         return BookingResponse.model_validate(booking)
@@ -159,19 +159,19 @@ def pay_booking(booking_id: int, payload: PaymentCreate, idempotency_key: UUID =
     try:
         return process_payment(session=session, booking_id=booking_id, idempotency_key=str(idempotency_key),
                                payment_token=payload.payment_token)
-    except PaymentProviderUnavailable as exc:
+    except PaymentProviderUnavailable as e:
         raise HTTPException(
             status_code=503,
             detail="Payment outcome is unknown. Retry with the same Idempotency-Key and payment token."
-        ) from exc
-    except ValueError as exc:
-        status_code = 404 if str(exc) == "Booking not found." else 409
-
-        raise HTTPException( status_code=status_code, detail=str(exc)) from exc
-    except IntegrityError as exc:
-        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        ) from e
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except PaymentConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except IntegrityError as e:
+        constraint_name = getattr(getattr(e.orig, "diag", None), "constraint_name", None)
 
         if constraint_name in {"payments_idempotency_key_key", "uq_payment_active_booking"}:
-            raise HTTPException(status_code=409, detail="Payment attempt or idempotency key conflict.") from exc
+            raise HTTPException(status_code=409, detail="Payment attempt or idempotency key conflict.") from e
 
         raise

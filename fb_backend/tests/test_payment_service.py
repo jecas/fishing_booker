@@ -8,6 +8,7 @@ from app.db import SessionLocal
 from app.models import Booking, Captains, Charter, Customer, Payment, Trip
 from app.payment_service import prepare_payment, apply_payment_result, process_payment
 from app.payment_client import ProviderChargeResponse, PaymentProviderUnavailable
+from app.exceptions import PaymentConflictError
 from tests.base import DatabaseTestCase
 
 
@@ -60,14 +61,11 @@ class PaymentServiceTests(DatabaseTestCase):
         mocked_datetime.now.return_value = self.now
         _, first = prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=self.key,
                                    payment_token="tok_success")
-
         _, repeated = prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=self.key,
                                       payment_token="tok_success")
-
-        self.assertEqual(first.id, repeated.id)
-
         count = self.session.scalar(select(func.count()).select_from(Payment).where(Payment.booking_id == self.booking.id))
 
+        self.assertEqual(first.id, repeated.id)
         self.assertEqual(count, 1)
 
     @patch("app.payment_service.datetime")
@@ -76,7 +74,7 @@ class PaymentServiceTests(DatabaseTestCase):
         prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=self.key,
                         payment_token="tok_success")
 
-        with self.assertRaisesRegex(ValueError,"Idempotency key was used with a different request"):
+        with self.assertRaisesRegex(PaymentConflictError,"Idempotency key was used with a different request"):
             prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=self.key,
                             payment_token="tok_declined")
 
@@ -86,7 +84,7 @@ class PaymentServiceTests(DatabaseTestCase):
         prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=self.key,
                         payment_token="tok_success")
 
-        with self.assertRaisesRegex(ValueError,"Booking is not awaiting a new payment attempt"):
+        with self.assertRaisesRegex(PaymentConflictError,"Booking is not awaiting a new payment attempt"):
             prepare_payment(session=self.session, booking_id=self.booking.id, idempotency_key=str(uuid4()),
                             payment_token="tok_success")
 

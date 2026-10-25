@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Booking, Captains, Customer, Trip
 from app.availability import get_unavailability_reasons
+from app.exceptions import ResourceNotFoundError, BookingConflictError
 
 
 def expire_pending_bookings(session: Session, charter_id: int, now: datetime) -> int:
@@ -20,23 +21,23 @@ def expire_pending_bookings(session: Session, charter_id: int, now: datetime) ->
 def create_booking(session: Session, trip_id: int, customer_id: int, trip_date: date, group_size: int) -> Booking:
     trip = session.get(Trip, trip_id)
     if not trip:
-        raise ValueError("Trip not found")
+        raise ResourceNotFoundError("Trip not found")
 
     customer = session.get(Customer, customer_id)
     if not customer:
-        raise ValueError("Customer not found")
+        raise ResourceNotFoundError("Customer not found")
 
     session.execute(select(Captains.id).where(Captains.id == trip.charter.captain_id).with_for_update()).scalar_one()
 
     now = datetime.now(timezone.utc)
     if trip_date < now.date():
-        raise ValueError("Trip date cannot be in the past")
+        raise BookingConflictError("Trip date cannot be in the past")
 
     expire_pending_bookings(session, trip.charter_id, now)
 
     reasons = get_unavailability_reasons(session, trip, trip_date, group_size, now)
     if reasons:
-        raise ValueError(f"Trip is unavailable: {reasons}")
+        raise BookingConflictError(f"Trip is unavailable: {reasons}")
 
     if trip.pricing_model == "per_person":
         total_price = trip.price * group_size
