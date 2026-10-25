@@ -3,8 +3,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from review_service_mock.reviews import ReviewResponse
-
 
 class HealthResponse(BaseModel):
     status: str

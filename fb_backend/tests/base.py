@@ -2,7 +2,6 @@ import subprocess
 import sys
 import unittest
 
-from app import models
 from app.db import Base, SessionLocal, engine
 
 

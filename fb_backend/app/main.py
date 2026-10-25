@@ -39,19 +39,19 @@ def get_charter(charter_id: int, session: Session = Depends(get_db)):
         statement = (select(Charter)
                     .options(joinedload(Charter.captain), selectinload(Charter.photos))
                     .where(Charter.id == charter_id))
-    charter = session.scalar(statement)
+        charter = session.scalar(statement)
 
-    if not charter:
-        raise HTTPException(status_code=404, detail="Charter not found")
+        if not charter:
+            raise HTTPException(status_code=404, detail="Charter not found")
 
-    business_id = charter.review_business_id
+        business_id = charter.review_business_id
 
-    response = CharterDetailsResponse(
-        **CharterResponse.model_validate(charter).model_dump(),
-        captain=CaptainResponse.model_validate(charter.captain),
-        photos = [{"id": photo.id, "url": generate_photo_url(photo.object_key)}
-                  for photo in sorted(charter.photos, key=lambda photo: photo.id)]
-    )
+        response = CharterDetailsResponse(
+            **CharterResponse.model_validate(charter).model_dump(),
+            captain=CaptainResponse.model_validate(charter.captain),
+            photos = [{"id": photo.id, "url": generate_photo_url(photo.object_key)}
+                    for photo in sorted(charter.photos, key=lambda photo: photo.id)]
+        )
 
     if business_id:
         try:
@@ -121,7 +121,7 @@ def book_trip(payload: BookingCreate, session: Session = Depends(get_db)):
                 booking = create_booking_service(session, payload.trip_id, customer.id, payload.trip_date,
                                                  payload.group_size)
             except ValueError as e:
-                if str(e) == "Trip not found.":
+                if str(e) == "Trip not found":
                     raise HTTPException(status_code=404, detail=str(e)) from e
 
                 raise HTTPException(status_code=409, detail=str(e)) from e
