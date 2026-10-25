@@ -22,11 +22,15 @@ Python does not need to be installed on the host machine.
 
 ## Run the application
 
-From the project root, run:
+Clone the repository and enter the application directory:
 
 ```bash
+git clone https://github.com/jecas/fishing_booker.git
+cd fishing_booker/fb_backend
 docker compose up --build -d
 ```
+
+Run all subsequent Docker Compose commands from the `fishing_booker/fb_backend` directory.
 
 Startup automatically applies database migrations and seeds demo data,
 including a charter, two trips, a captain's day off, and a photo.
