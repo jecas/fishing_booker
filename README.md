@@ -238,7 +238,7 @@ Use this request body:
 
 ```json
 {
-  "token": "success"
+  "payment_token": "tok_success"
 }
 ```
 
