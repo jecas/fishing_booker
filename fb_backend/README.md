@@ -132,7 +132,11 @@ can therefore confirm the booking after the hold deadline.
 ## Photos and reviews
 
 Photo files are stored in S3-compatible storage. PostgreSQL stores their
-object keys. The API generates signed URLs that expire after 15 minutes.
+object keys. Charter details contain short API links that redirect to
+freshly generated signed S3 URLs, valid for 15 minutes.
+
+The short links remain usable while the photo exists. The redirect endpoint
+is publicly accessible but omitted from the Swagger documentation.
 
 Reviews are fetched from a mock external provider when a charter has a
 linked review business ID.

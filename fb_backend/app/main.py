@@ -1,12 +1,13 @@
 from uuid import UUID
 from datetime import date
-from fastapi import FastAPI, Depends, Query, HTTPException, Header
+from fastapi import FastAPI, Depends, Query, HTTPException, Header, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.db import get_db
-from app.models import Charter, Trip, Customer
+from app.models import Charter, Trip, Customer, CharterPhoto
 from app.storage import generate_photo_url
 from app.availability import get_unavailability_reasons
 from app.schemas import HealthResponse, CharterResponse, CharterDetailsResponse, TripResponse, TripAvailabilityResponse, \
@@ -35,7 +36,7 @@ def list_charters(offset: int=Query(default=0, ge=0), limit: int=Query(default=2
 
 
 @app.get("/charters/{charter_id}", response_model=CharterDetailsResponse)
-def get_charter(charter_id: int, session: Session = Depends(get_db)):
+def get_charter(charter_id: int, request: Request, session: Session = Depends(get_db)):
     with session.begin():
         statement = (select(Charter)
                     .options(joinedload(Charter.captain), selectinload(Charter.photos))
@@ -50,7 +51,7 @@ def get_charter(charter_id: int, session: Session = Depends(get_db)):
         response = CharterDetailsResponse(
             **CharterResponse.model_validate(charter).model_dump(),
             captain=CaptainResponse.model_validate(charter.captain),
-            photos = [{"id": photo.id, "url": generate_photo_url(photo.object_key)}
+            photos = [{"id": photo.id, "url": str(request.url_for("get_photo", photo_id=photo.id))}
                     for photo in sorted(charter.photos, key=lambda photo: photo.id)]
         )
 
@@ -175,3 +176,14 @@ def pay_booking(booking_id: int, payload: PaymentCreate, idempotency_key: UUID =
             raise HTTPException(status_code=409, detail="Payment attempt or idempotency key conflict.") from e
 
         raise
+
+
+@app.get("/photos/{photo_id}", name="get_photo", include_in_schema=False)
+def get_photo(photo_id: int, session: Session = Depends(get_db)):
+    photo = session.get(CharterPhoto, photo_id)
+
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    return RedirectResponse(url=generate_photo_url(photo.object_key), status_code=307,
+                            headers={"Cache-Control": "no-store"})

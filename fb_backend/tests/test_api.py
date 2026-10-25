@@ -1,8 +1,9 @@
 from unittest.mock import patch
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from app.main import app
-from app.models import Captains, Charter
+from app.models import Captains, Charter, CharterPhoto
 from app.schemas import ReviewResponse
 from app.reviews_client import ReviewsProviderUnavailable
 from tests.base import DatabaseTestCase
@@ -124,3 +125,42 @@ class CharterApiTests(DatabaseTestCase):
         self.assertEqual(data["captain"]["first_name"], "Test")
         self.assertEqual(data["reviews"], [])
         self.assertEqual(data["reviews_status"], "unavailable")
+
+    @patch("app.main.generate_photo_url")
+    def test_photo_redirects_to_signed_url(self, mocked_generate_url):
+        charter_id = self.session.scalar(select(Charter.id).order_by(Charter.id))
+        photo = CharterPhoto(charter_id=charter_id, object_key="test/boat.jpg")
+        self.session.add(photo)
+        self.session.flush()
+        photo_id = photo.id
+        self.session.commit()
+
+        signed_url = "https://example.com/boat.jpg?signature=test"
+        mocked_generate_url.return_value = signed_url
+
+        response = self.client.get(f"/photos/{photo_id}", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.headers["location"], signed_url)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        mocked_generate_url.assert_called_once_with("test/boat.jpg")
+
+        details = self.client.get(f"/charters/{charter_id}")
+
+        self.assertEqual(details.status_code, 200)
+        self.assertEqual(details.json()["photos"],[{"id": photo_id, "url": f"http://testserver/photos/{photo_id}"}])
+        mocked_generate_url.assert_called_once()
+
+    @patch("app.main.generate_photo_url")
+    def test_missing_photo_returns_404(self, mocked_generate_url):
+        response = self.client.get("/photos/0", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Photo not found")
+        mocked_generate_url.assert_not_called()
+
+    def test_photo_redirect_is_not_in_openapi(self):
+        response = self.client.get("/openapi.json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("/photos/{photo_id}", response.json()["paths"])
